@@ -1,0 +1,17 @@
+{
+  "source": "Fictional Northstar shop; authored fixtures, not real customer data",
+  "policies": [
+    {"id": "shipping", "keywords": ["shipping", "delivery fee", "free delivery"], "text": "Standard shipping takes 4 business days. Shipping is free for orders over 75 USD."},
+    {"id": "returns", "keywords": ["return"], "text": "Unused items may be returned within 30 days of delivery.", "return_window_days": 30},
+    {"id": "refunds", "keywords": ["refund"], "text": "Approved refunds are issued within 5 business days."},
+    {"id": "support", "keywords": ["support", "opening", "contact"], "text": "Support is available Monday to Friday, 09:00 to 18:00 UTC."},
+    {"id": "warranty", "keywords": ["warranty"], "text": "Products include a 12 month warranty for manufacturing defects."},
+    {"id": "international", "keywords": ["international", "overseas"], "text": "International shipping is available to Canada and the United Kingdom."}
+  ],
+  "orders": {
+    "A100": {"found": true, "order_id": "A100", "status": "shipped", "days_since_delivery": null},
+    "A200": {"found": true, "order_id": "A200", "status": "delivered", "days_since_delivery": 12},
+    "A300": {"found": true, "order_id": "A300", "status": "delivered", "days_since_delivery": 45},
+    "A400": {"found": true, "order_id": "A400", "status": "delivered", "days_since_delivery": 30}
+  }
+}
