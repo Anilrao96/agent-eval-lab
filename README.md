@@ -10,9 +10,9 @@ An agent can produce a plausible answer after calling the wrong tool, looking up
 
 This is an **AI-assisted portfolio project**, not a production deployment or a claim of prior professional evaluation ownership. The included results use scripted agents and fictional data; no live model benchmark is claimed.
 
-## Try it in 30 seconds
+## Clone and run your first evaluation
 
-Requires Python 3.10+. No package installation, API key or model download is needed for the demo.
+Requires Git and Python 3.10 or newer. Run these commands in a terminal. No package installation, API key or model download is needed for the offline demo.
 
 ```bash
 git clone https://github.com/Anilrao96/agent-eval-lab.git
@@ -21,7 +21,9 @@ python -m unittest discover -s tests -v
 python -m agent_eval demo --out runs/demo --repetitions 3
 ```
 
-Open `runs/demo/report.html`. On Windows, if `python` is unavailable and `uv` is installed:
+Open `runs/demo/report.html` in a browser to inspect pass rates, failed checks, answers and tool traces. The demo also saves `run.json` and `results.jsonl` under `runs/demo/baseline/` and `runs/demo/candidate/`.
+
+Run subsequent commands from the cloned repository's root directory. On Windows, if `python` is unavailable and `uv` is installed, use the detected interpreter in place of `python`:
 
 ```powershell
 $pythonPath = (uv python find).Trim()
@@ -50,19 +52,17 @@ The demonstration compares a deliberately brittle support agent with a more care
 
 **No evaluator libraries wrap the core logic.** The runner, contracts, metrics, comparison and reports use Python's standard library. There is no mandatory LLM judge: lexical and trace checks are cheap and inspectable. Semantic judgments still require a separately calibrated judge or human review.
 
-## Evaluate a live model
+## Evaluate the bundled agent with a live model
 
-Use a running chat-completions compatible endpoint and a model that supports tool calling. The adapter is designed against the documented [Ollama compatibility API](https://docs.ollama.com/api/openai-compatibility). Compatibility is not a guarantee across every provider or model; the HTTP protocol is integration-tested with a local mock server.
+First start a chat-completions compatible endpoint with a model that supports tool calling. Replace `YOUR_TOOL_CAPABLE_MODEL` with a model available on that endpoint. The adapter is designed against the documented [Ollama compatibility API](https://docs.ollama.com/api/openai-compatibility). Compatibility is not a guarantee across every provider or model; the HTTP protocol is integration-tested with a local mock server.
 
 ```bash
-python -m agent_eval run \
-  --base-url http://localhost:11434/v1 \
-  --model YOUR_TOOL_CAPABLE_MODEL \
-  --out runs/local-model \
-  --concurrency 2 --timeout 60 --repetitions 3
+python -m agent_eval run --base-url http://localhost:11434/v1 --model YOUR_TOOL_CAPABLE_MODEL --out runs/local-model --concurrency 2 --timeout 60 --repetitions 3
 ```
 
-The command above uses Bash line continuations; in PowerShell run it on one line. Alternatively set `EVAL_BASE_URL` and `EVAL_MODEL`. For an authenticated HTTPS provider, set `EVAL_API_KEY` in your environment; credentials are never stored in run metadata. `.env.example` is a template only; the CLI does not automatically load `.env` files.
+Open `runs/local-model/report.html` after the run. This command evaluates **the bundled support agent against its 24 fictional support cases**. `--base-url` points to the model API; it does not automatically integrate an existing external agent. Use [Add your application](#add-your-application) for that integration.
+
+Alternatively set `EVAL_BASE_URL` and `EVAL_MODEL`. For an authenticated HTTPS provider, set `EVAL_API_KEY` in your environment; credentials are never stored in run metadata. `.env.example` is a template only; the CLI does not automatically load `.env` files.
 
 Token usage comes from the provider. Cost is **unknown** unless both `--input-price` and `--output-price` are supplied, in USD per million tokens. Supply prices for your actual model rather than assuming a default. A missing usage field or a retried execution makes usage/cost unknown; explicit budget checks then fail closed. Reported totals cover successful calls with known usage, not a billing ledger.
 
@@ -71,43 +71,91 @@ The bundled data deliberately tests multiple capabilities. Customize checks and 
 ## Compare two versions
 
 ```bash
-python -m agent_eval compare \
-  --baseline runs/demo/baseline/run.json \
-  --candidate runs/demo/candidate/run.json \
-  --out runs/comparison --min-pass-rate 0.90
+python -m agent_eval compare --baseline runs/demo/baseline/run.json --candidate runs/demo/candidate/run.json --out runs/comparison --min-pass-rate 0.90
 ```
 
-Comparison requires the same dataset fingerprint, evaluation fingerprint, case/repetition keys and repetition count. A higher average cannot conceal a newly failing case. Safety failures or execution errors fail the gate. `--max-drop` controls the aggregate drop tolerance; it never permits new individual case failures.
+The paths above are generated by the offline demo. Open `runs/comparison/report.html` for the comparison, or inspect `runs/comparison/comparison.json` for gate reasons. For your own agent, save before/after evaluations into different directories and compare their `run.json` files.
+
+Comparison requires the same dataset fingerprint, evaluation fingerprint, case/repetition keys and repetition count. Keep the test cases unchanged between the two versions. A higher average cannot conceal a newly failing case. Safety failures or execution errors fail the gate. `--max-drop` controls the aggregate drop tolerance; it never permits new individual case failures.
 
 Exit codes: **0** gate passed, **1** evaluation/regression gate failed, **2** invalid configuration or artifact.
 
 ## Add your application
 
-Implement `async predict(AgentInput) -> Prediction` and a `name` property. The adapter receives only a prompt; it returns answer text, structured tool events, and usage when known. Use `run_suite()` from Python:
+### Run the complete custom-agent example
 
-```python
-import asyncio
-from agent_eval.dataset import load_dataset
-from agent_eval.models import Prediction
-from agent_eval.runner import RunConfig, run_suite
-from agent_eval.report import write_artifacts
+The repository includes a separate fictional order-tracking application, an adapter, seven JSONL cases and an evaluation entry point. Everything needed is checked in; there are no placeholder application imports, API keys or additional dependencies.
 
-class MyApplication:
-    name = "my-app-v1"
-
-    async def predict(self, item):
-        # Replace this with your application call and capture its actual tool events.
-        return Prediction(answer="Your application's answer")
-
-cases, fingerprint = load_dataset("agent_eval/data/support_v1.jsonl")
-run = asyncio.run(run_suite(cases, fingerprint, MyApplication(), RunConfig()))
-write_artifacts(run, "runs/custom")
+```bash
+python -m examples.custom_agent --out runs/custom --repetitions 3
 ```
 
-An example case:
+Expected output includes **`21/21 passed; gate PASS`**: seven cases, each run three times. Open `runs/custom/report.html`; `runs/custom/run.json` contains the manifest and `runs/custom/results.jsonl` contains one record per execution. This is a scripted integration example, not a live LLM benchmark.
+
+| File | Responsibility |
+|---|---|
+| [agent.py](examples/custom_agent/agent.py) | Independent application with fictional order/shipment stores and its own result format; does not import the evaluator or read gold labels |
+| [adapter.py](examples/custom_agent/adapter.py) | Converts the application's answer, actual tool events and optional usage into `Prediction` |
+| [cases.jsonl](examples/custom_agent/cases.jsonl) | Seven labeled tasks covering multi-step retrieval, missing orders, lowercase IDs, JSON output and refusal |
+| [evaluate.py](examples/custom_agent/evaluate.py) | Loads cases, calls `run_suite()`, writes reports and returns a CI exit code |
+
+For a shipped order, the application calls `get_order` and then `get_shipment`, using the shipment ID returned by the first lookup. Each event is captured at the tool call. Expected answers and tool paths remain in `cases.jsonl`, outside the agent.
+
+### Connect your actual agent
+
+Implement `async predict(AgentInput) -> Prediction` and a `name` property. The adapter receives only a prompt; it returns answer text, structured tool events, and usage when known. Here is the working adapter from the example:
+
+```python
+from agent_eval.models import AgentInput, Prediction, ToolEvent
+from examples.custom_agent.agent import run_agent
+
+class CustomAgentAdapter:
+    name = "scripted-custom-orders-v1"
+
+    async def predict(self, item: AgentInput) -> Prediction:
+        raw = await run_agent(item.prompt)
+        usage = raw.get("usage") or {}
+        return Prediction(
+            answer=raw["text"],
+            trace=[
+                ToolEvent(
+                    name=event["tool"],
+                    arguments=event["input"],
+                    output=event.get("result"),
+                    error=event.get("error"),
+                )
+                for event in raw["events"]
+            ],
+            input_tokens=usage.get("input_tokens"),
+            output_tokens=usage.get("output_tokens"),
+            cost_usd=usage.get("cost_usd"),
+        )
+```
+
+To integrate your application, replace the `run_agent` import/call with your own client and map its result fields in the adapter. Use actual recorded tool events, including rejected attempts; do not reconstruct events from expected answers. Set the adapter's `name` to your application's version and update the example provenance in `evaluate.py` to describe the real application and its model/prompt/configuration versions. For a blocking synchronous client, await `asyncio.to_thread(client_call, item.prompt)` so the runner can schedule other cases; its logical timeout cannot kill the worker thread.
+
+Supply real provider usage when available. Leave absent token counts and cost as `None`; do not invent zeros. The example is ordinary Python code, so its usage stays unknown.
+
+### Create cases for your domain and run them
+
+Write one JSON object per line in a JSONL file. Give each task a unique ID, a prompt, slice tags and expected checks. For example, this line from the custom suite checks both the answer and the two dependent tool calls:
 
 ```json
-{"id":"order-check","prompt":"Check order A100","tags":["agent"],"checks":{"contains_all":["shipped"],"tool_path":[{"name":"get_order","arguments":{"order_id":"A100"}}],"max_tool_calls":1}}
+{"id":"custom-shipped","prompt":"Track order A100.","tags":["agent","multi-step"],"checks":{"contains_all":["A100","shipped","2 business days"],"tool_path":[{"name":"get_order","arguments":{"order_id":"A100"}},{"name":"get_shipment","arguments":{"shipment_id":"S100"}}],"max_tool_calls":2}}
+```
+
+After adapting the example to your application and writing `my_cases.jsonl`, run:
+
+```bash
+python -m examples.custom_agent --dataset my_cases.jsonl --out runs/my-agent-v1 --repetitions 3
+```
+
+The runner only receives the cases through `load_dataset()`; the application continues to receive prompts only. A custom evaluation exits **0** when its minimum pass rate is met (90% by default), there are no execution errors and all safety-tagged tasks pass; it exits **1** when that gate fails, and **2** for invalid configuration. Failed evaluations still write reports. Use `--min-pass-rate`, `--timeout` and `--concurrency` to set the execution policy.
+
+To compare a revision, rerun the same cases and repetition count with `--out runs/my-agent-v2`, then:
+
+```bash
+python -m agent_eval compare --baseline runs/my-agent-v1/run.json --candidate runs/my-agent-v2/run.json --out runs/my-agent-comparison
 ```
 
 Use `max_latency_ms`, `max_tokens` and `max_cost_usd` when those budgets are part of the task contract. Every configured check must pass; scores are not averaged to hide a critical failure. See [the methodology](docs/evaluation.md) for exact semantics and limitations.
@@ -120,6 +168,7 @@ agent_eval/data/ Fictional knowledge store and 24-case JSONL evaluation set
 tests/         Scorer, runner, comparison, CLI and local HTTP integration tests
 docs/          Architecture, evaluation methodology and interview walkthrough
 examples/demo/ Generated offline evidence, labeled as scripted
+examples/custom_agent/ Complete independent application, adapter, dataset and CLI
 .github/       CI that runs without credentials or external model calls
 ```
 

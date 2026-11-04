@@ -1,3 +1,5 @@
 include LICENSE README.md
 recursive-include agent_eval/data *.json *.jsonl
 recursive-include docs *.md
+include examples/__init__.py
+recursive-include examples/custom_agent *.py *.jsonl
